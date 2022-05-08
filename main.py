@@ -84,9 +84,9 @@ async def get_catatan_perjalanan(page: int = 1, user: list = Depends(get_user), 
     data.update({'page_size': PAGE_SIZE, 'page': (page-1)*PAGE_SIZE})
     cursor.execute(sql, data)
     records = cursor.fetchall()
-    if not records:
+    if not records and page > 1:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail='sorry, the page you looking for doesn\'t exists!')
+                            detail='Page Not Found 404 Error ! ')
     return {'catatan_perjalanan': records}
 
 
