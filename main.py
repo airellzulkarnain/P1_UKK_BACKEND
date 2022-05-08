@@ -1,4 +1,4 @@
-from fastapi import FastAPI, status, HTTPException, Depends, Path, Form, Body, Query
+from fastapi import FastAPI, status, HTTPException, Depends, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from models import User, Sort, Record
 from config import config, PAGE_SIZE

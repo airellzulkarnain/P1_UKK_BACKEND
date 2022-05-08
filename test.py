@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from main import app
 import mysql.connector
 from config import config
-from os import system
+
 
 db = mysql.connector.connect(**config['database'])
 cursor = db.cursor()
@@ -80,11 +80,11 @@ def test_new_user_exsited():
 def test_login_full():
     response = client.post('/login', json=user2)
     assert response.status_code == 200
-    assert  response.json() == user2['NIK']
+    assert response.json() == user2['NIK']
 
 
 def test_login_no_nama():
-    response = client.post('/login', json={'NIK':'1111111111111111'})
+    response = client.post('/login', json={'NIK': '1111111111111111'})
 
     assert response.status_code == 422
 
