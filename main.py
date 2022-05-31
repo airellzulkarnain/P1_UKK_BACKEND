@@ -9,7 +9,7 @@ import os
 app = FastAPI()
 app.add_middleware(CORSMiddleware, **config['CORS'])
 db = mysql.connector.connect(**config['database'])
-cursor = db.cursor()
+cursor = db.cursor(dictionary=True)
 
 
 def get_user(NIK:str = Query(..., regex='^[0-9]+$', max_length=16, min_length=16)):
@@ -25,7 +25,7 @@ def get_user(NIK:str = Query(..., regex='^[0-9]+$', max_length=16, min_length=16
 def login(user: User):
     cursor.execute('SELECT * FROM user WHERE NIK=%s AND nama=%s', (user.NIK, user.nama, ))
     if cursor.fetchone() is not None:
-        return user.NIK
+        return user
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='user tidak ditemukan!.')
 
 
@@ -42,12 +42,15 @@ def edit_user(user: list = Depends(get_user), nama: str = Form(..., max_length=5
 
 @app.post('/add_records')
 def add_records(record_data: Record, user: list = Depends(get_user)):
-    cursor.execute(
-        'INSERT INTO catatan_perjalanan (tanggal, waktu, lokasi, suhu_tubuh, NIK) VALUES(%s, %s, %s, %s, %s)',
-        (record_data.tanggal, record_data.waktu, record_data.lokasi, record_data.suhu_tubuh, user[0])
-    )
-    db.commit()
-    return {'message': 'added new record'}
+    try:
+        cursor.execute(
+            'INSERT INTO catatan_perjalanan (tanggal, waktu, lokasi, suhu_tubuh, NIK) VALUES(%s, %s, %s, %s, %s)',
+            (record_data.tanggal, record_data.waktu, record_data.lokasi, record_data.suhu_tubuh, user['NIK'])
+        )
+        db.commit()
+        return {'message': 'added new record'}
+    except:
+        raise HTTPException(status_code=400, detail="Invalid Value submitted")
 
 
 @app.post('/new_user')
@@ -63,31 +66,41 @@ def new_user(user: User):
 
 
 @app.get('/records')
-async def get_catatan_perjalanan(page: int = 1, user: list = Depends(get_user), cari: str | None = None,
-                                 tanggal: Sort | None = None, waktu: Sort | None = None,
-                                 suhu_tubuh: Sort | None = None):
-    sorters = {'tanggal': tanggal, 'waktu': waktu, 'suhu_tubuh': suhu_tubuh}
-    print(tanggal)
-    sql = f'''SELECT * FROM catatan_perjalanan WHERE NIK=%(NIK)s 
-    {'AND (tanggal LIKE %(cari)s OR waktu LIKE %(cari)s OR lokasi LIKE %(cari)s)' if cari is not None else ' '}
-    ORDER BY'''
-    for sorter, order in sorters.items():
-        if order is not None:
-            sql += f' {sorter} {order.value},'
-    if sql.endswith('ORDER BY'):
-        sql = sql.replace('ORDER BY', '')
-    sql = sql.rstrip(', ')
-    sql += ' LIMIT %(page_size)s OFFSET %(page)s'
-    print(sql)
-    print(tanggal)
-    data = {'cari': f'%{cari}%', 'NIK': user[0]} if cari is not None else {'NIK': user[0]}
-    data.update({'page_size': PAGE_SIZE, 'page': (page-1)*PAGE_SIZE})
-    cursor.execute(sql, data)
-    records = cursor.fetchall()
-    if not records and page > 1:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail='Page Not Found 404 Error ! ')
-    return {'catatan_perjalanan': records}
+async def get_catatan_perjalanan(pagenum: int = 0, pagesize: int = 5, sortdatafield: str | None = None, sortorder: str | None = None, user: list = Depends(get_user)):
+				# (page: int = 1, user: list = Depends(get_user), cari: str | None = None,
+                                #  tanggal: Sort | None = None, waktu: Sort | None = None,
+                                #  suhu_tubuh: Sort | None = None):
+    # sorters = {'tanggal': tanggal, 'waktu': waktu, 'suhu_tubuh': suhu_tubuh}
+    # sql = f'''SELECT * FROM catatan_perjalanan WHERE NIK=%(NIK)s 
+    # {'AND (tanggal LIKE %(cari)s OR waktu LIKE %(cari)s OR lokasi LIKE %(cari)s)' if cari is not None else ' '}
+    # ORDER BY'''
+    # for sorter, order in sorters.items():
+    #     if order is not None:
+    #         sql += f' {sorter} {order.value},'
+    # if sql.endswith('ORDER BY'):
+    #     sql = sql.replace('ORDER BY', '')
+    # sql = sql.rstrip(', ')
+    # sql += ' LIMIT %(page_size)s OFFSET %(page)s'
+    # data = {'cari': f'%{cari}%', 'NIK': user['NIK']} if cari is not None else {'NIK': user['NIK']}
+    # data.update({'page_size': PAGE_SIZE, 'page': (page-1)*PAGE_SIZE})
+    # cursor.execute(sql, data)
+    # records = cursor.fetchall()
+    # if not records and page > 1:
+    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+    #                         detail='Page Not Found 404 Error ! ')
+    # return records
+    start = pagenum * pagesize
+    query = "SELECT SQL_CALC_FOUND_ROWS tanggal, waktu, lokasi, suhu_tubuh FROM catatan_perjalanan WHERE NIK=%s LIMIT %s, %s"
+    if sortdatafield is not None: 
+        if sortorder == "desc": 
+            query =  f"SELECT SQL_CALC_FOUND_ROWS tanggal, waktu, lokasi, suhu_tubuh FROM catatan_perjalanan WHERE NIK=%s ORDER BY {sortdatafield} DESC LIMIT %s, %s"
+        elif sortorder == "asc": 
+            query =  f"SELECT SQL_CALC_FOUND_ROWS tanggal, waktu, lokasi, suhu_tubuh FROM catatan_perjalanan WHERE NIK=%s ORDER BY {sortdatafield} ASC LIMIT %s, %s"
+    cursor.execute(query, (user['NIK'], start, pagesize))
+    data = {"Rows": cursor.fetchall()}
+    cursor.execute("SELECT FOUND_ROWS() AS total_rows")
+    data.update({"TotalRows": cursor.fetchall()[0]['total_rows']})
+    return data
 
 
 if __name__ == "__main__":
